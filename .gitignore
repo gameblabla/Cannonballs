@@ -82,6 +82,9 @@ epr-10329.58
 epr-10328.75
 epr-10330.57
 
+*.o
+core
+
 
 #################
 ## Other working directories

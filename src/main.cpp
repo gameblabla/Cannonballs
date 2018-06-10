@@ -14,11 +14,6 @@
 
 // SDL Library
 #include <SDL.h>
-#ifndef SDL2
-#pragma comment(lib, "SDLmain.lib") // Replace main with SDL_main
-#endif
-#pragma comment(lib, "SDL.lib")
-#pragma comment(lib, "glu32.lib")
 
 // SDL Specific Code
 #if defined SDL2
@@ -227,9 +222,9 @@ static void tick()
 static void main_loop()
 {
     // FPS Counter (If Enabled)
-    Timer fps_count;
+    //Timer fps_count;
     int frame = 0;
-    fps_count.start();
+    //fps_count.start();
 
     // General Frame Timing
     Timer frame_time;
@@ -250,14 +245,16 @@ static void main_loop()
         t = frame_time.get_ticks();
 
         // Cap Frame Rate: Sleep Remaining Frame Time
-        /*if (t < deltatime)
+        #ifndef GCW
+        if (t < deltatime)
         {
             SDL_Delay((Uint32) (deltatime - t));
-        }*/
+        }
+        #endif
         
         deltatime -= deltaintegral;
 
-        if (config.video.fps_count)
+        /*if (config.video.fps_count)
         {
             frame++;
             // One second has elapsed
@@ -267,7 +264,7 @@ static void main_loop()
                 frame       = 0;
                 fps_count.start();
             }
-        }
+        }*/
     }
 
     quit_func(0);
