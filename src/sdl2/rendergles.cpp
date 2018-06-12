@@ -39,58 +39,6 @@ static const char *fragment_shader =
    "   gl_FragColor = vec4(texture2D(Texture, tex_coord).rgb, 1.0);\n"
    "}";
 
-const char* vertex_shader_scanlines =
-"attribute vec4 VertexCoord;\n"
-"attribute vec4 COLOR;\n"
-"attribute vec4 TexCoord;\n"
-"varying vec4 COL0;\n"
-"varying vec4 TEX0;\n"
-"varying vec2 omega;\n"
-
-"vec4 _oPosition1;\n"
-"uniform mat4 MVPMatrix;\n"
-"uniform mediump int FrameDirection;\n"
-"uniform mediump int FrameCount;\n"
-"uniform mediump vec2 OutputSize;\n"
-"uniform mediump vec2 TextureSize;\n"
-"uniform mediump vec2 InputSize;\n"
-
-"void main()\n"
-"{\n"
-"    gl_Position = MVPMatrix * VertexCoord;\n"
-"    COL0 = COLOR;\n"
-"    TEX0.xy = TexCoord.xy;\n"
-"	omega = vec2(3.141592654 * OutputSize.x, 2.0 * 3.141592654 * TextureSize.y);\n"
-"}"
-;
-
-const char* fragment_shader_scanlines =
-
-"precision mediump float;\n"
-
-"uniform mediump int FrameDirection;\n"
-"uniform mediump int FrameCount;\n"
-"uniform mediump vec2 OutputSize;\n"
-"uniform mediump vec2 TextureSize;\n"
-"uniform mediump vec2 InputSize;\n"
-"uniform sampler2D Texture;\n"
-"uniform mediump float SCANLINE_BASE_BRIGHTNESS;\n"
-
-"varying vec4 TEX0;\n"
-"varying vec2 omega;\n"
-
-"mediump float SCANLINE_SINE_COMP_A = 0.0;\n"
-"mediump float SCANLINE_SINE_COMP_B = 0.10;\n"
-
-"void main()\n"
-"{\n"
-"   vec2 sine_comp = vec2(SCANLINE_SINE_COMP_A, SCANLINE_SINE_COMP_B);\n"
-"   vec3 res = texture2D(Texture, TEX0.xy).xyz;\n"
-"   vec3 scanline = res * (SCANLINE_BASE_BRIGHTNESS + dot(sine_comp * sin(TEX0.xy * omega), vec2(1.0, 1.0)));\n"
-"   gl_FragColor = vec4(scanline.x, scanline.y, scanline.z, 1.0);\n"
-"}"
-; 
-
 const GLfloat vertices[] =
 {
 	-0.5f, -0.5f, 0.0f,
@@ -132,7 +80,7 @@ bool RenderGLES::init(int src_width, int src_height,
                     int video_mode,
                     int scanlines)
 {
-    const int bpp = 32;
+    const int bpp = 16;
 
     // We init the SDL2 EGL context here
     SDL_ShowCursor(SDL_DISABLE);
@@ -155,7 +103,7 @@ bool RenderGLES::init(int src_width, int src_height,
     if (surface)
         SDL_FreeSurface(surface);
 
-    surface = SDL_CreateRGBSurface(0, 0, 0, 32, 0, 0, 0, 0);
+    surface = SDL_CreateRGBSurface(0, 0, 0, 16, 0, 0, 0, 0);
     
     if (!surface) {
 	    std::cerr << "Can't create rendering memory surface: " << SDL_GetError() << std::endl;
@@ -185,7 +133,7 @@ bool RenderGLES::init(int src_width, int src_height,
 
     if (screen_pixels)
         delete[] screen_pixels;
-    screen_pixels = new uint32_t[src_width * src_height];
+    screen_pixels = new uint16_t[src_width * src_height];
 
     // SDL Pixel Format Information
     Rshift = surface->format->Rshift;
@@ -207,15 +155,15 @@ bool RenderGLES::init(int src_width, int src_height,
     glGenTextures(1, &texture);
 
     // ---------- Screen texture setup  ------------------
-    const GLint param = config.video.filtering ? GL_LINEAR : GL_NEAREST;
+    const GLint param = GL_NEAREST;
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, param);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, param);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA_EXT,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,
 		src_width, src_height, 0,
-		GL_BGRA_EXT, GL_UNSIGNED_BYTE,
+		GL_RGB, GL_UNSIGNED_SHORT_5_6_5,
 		NULL); SHOW_ERROR
   
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear screen and depth buffer
@@ -295,12 +243,8 @@ void RenderGLES::gles2_init_shaders (unsigned input_width, unsigned input_height
 
 	// Load custom shaders
    	float input_size[2], output_size[2], texture_size[2];
-	float scanline_bright;
 	
-	if (scanlines)
-		shader.program = CreateProgram(vertex_shader_scanlines, fragment_shader_scanlines);
-	else
-		shader.program = CreateProgram(vertex_shader, fragment_shader);
+	shader.program = CreateProgram(vertex_shader, fragment_shader);
 
 	if(shader.program)
 	{
@@ -325,21 +269,12 @@ void RenderGLES::gles2_init_shaders (unsigned input_width, unsigned input_height
 			output_size [1] = display_height;
 			texture_size[0] = texture_width;
 			texture_size[1] = texture_height;
-
-			scanline_bright = 0.85;
 		}
 	}
 	else	
 		exit(0);
 
 	glUseProgram(shader.program); SHOW_ERROR
-
-	if (scanlines) {
-		glUniform2fv(shader.input_size, 1, input_size);
-		glUniform2fv(shader.output_size, 1, output_size);
-		glUniform2fv(shader.texture_size, 1, texture_size);
-		glUniform1f(shader.scanline_bright, scanline_bright);
-	}
 }
 
 GLuint RenderGLES::CreateShader(GLenum type, const char *shader_src)
@@ -442,7 +377,7 @@ bool RenderGLES::finalize_frame()
 
 void RenderGLES::draw_frame(uint16_t* pixels)
 {
-    uint32_t* spix = screen_pixels;
+    uint16_t* spix = screen_pixels;
 
     // Lookup real RGB value from rgb array for backbuffer
     for (int i = 0; i < (src_width * src_height); i++)
@@ -450,8 +385,8 @@ void RenderGLES::draw_frame(uint16_t* pixels)
 
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,	       // target, LOD, xoff, yoff
             src_width, src_height,                     // texture width, texture height
-            GL_BGRA_EXT,                               // format of pixel data
-            GL_UNSIGNED_BYTE,               	       // data type of pixel data
+            GL_RGB,                               // format of pixel data
+            GL_UNSIGNED_SHORT_5_6_5,               	       // data type of pixel data
             screen_pixels);                            // pointer in image memory
     
     glDrawElements(GL_TRIANGLES, kIndexCount, GL_UNSIGNED_SHORT, 0); SHOW_ERROR
